@@ -1,5 +1,9 @@
 import clientsModel from "../models/clientsModel.js";
 import usersModel from "../models/usersModel.js";
+import { createClient } from "redis";
+
+const redis = createClient();
+
 
 export async function createClientController(req, res) {
     try {
@@ -25,23 +29,35 @@ export async function createClientController(req, res) {
 };
 
 export async function getClientsController(req, res) {
-    // return res.send("CHEGOU AQUI")
     try {
+        
         const { login } = req.body;
-        console.log("HERE-01");
-
+        
         const user = await usersModel.getUserByLogin(login);
 
-        console.log("HERE-02");
-        const clientsList = await clientsModel.getClientsByUserId(user.id);
+        let clientsList;
+        
+        await redis.connect();
+        
+        const cachedClients = await redis.get(`${user.id}`);
+        
+        if(!cachedClients){
+          
+            clientsList = await clientsModel.getClientsByUserId(user.id);
+          
+            await redis.set(`${user.id}`, JSON.stringify(clientsList));
+          
+        } else {
+            clientsList = cachedClients;
+        };
 
-        console.log("HERE-03");
         return res.status(200).send(clientsList);
         
     } catch (error) {
-        console.log("HERE-04");
         console.log(error);
 
         return res.status(error.status || 400).send(error.message || "");
+    } finally {
+        await redis.disconnect();
     };
 };
